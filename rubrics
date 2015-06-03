@@ -1,0 +1,66 @@
+with
+  basic_rubrics as 
+  ( 
+    select node.id, node.title, node.cached_level,
+    node.parent_id, node.lft, node.rgt
+    from rubrics as node,
+    rubrics as parent
+    where node.lft between parent.lft and parent.rgt
+    and parent.id = 4
+    order by node.lft
+  ), 
+  childs_count as
+  (
+    select a.id, a.title, count(a.id) as childs_count
+    from basic_rubrics a, basic_rubrics b
+    where a.id = b.parent_id
+    group by a.id, a.title, a.parent_id
+  ),
+  rubrics_with_count as
+  (
+    select basic_rubrics.*, childs_count.childs_count 
+    from basic_rubrics 
+    left outer join childs_count
+    on (basic_rubrics.id = childs_count.id) 
+  ),
+  products_count as
+  (
+    select rubrics_with_count.*, count(products.id) as products_count
+    from rubrics_with_count
+    left outer join products 
+    on (products.rubric_id = rubrics_with_count.id)
+    group by rubrics_with_count.id, rubrics_with_count.title,
+    rubrics_with_count.cached_level, rubrics_with_count.parent_id,
+    rubrics_with_count.childs_count, rubrics_with_count.lft, rubrics_with_count.rgt
+  ),
+  rubrics_12345 as
+  (
+    select node.id, node.title, node.cached_level, node.parent_id, node.lft, node.rgt,
+    node.childs_count, sum(parent.products_count) as products_sum 
+    from products_count as node,
+    products_count as parent
+    where node.lft between parent.lft and parent.rgt
+    group by node.id, node.title, node.cached_level,
+    node.parent_id, node.lft, node.rgt, node.childs_count, node.products_count
+  ),
+  traits_count as 
+  (
+    select a.*, count(b.id) as traits_count
+    from rubrics_12345 a
+    left outer join trait_rubrics b
+    on a.id = b.rubric_id AND b.type = 'TraitRubric'
+    group by a.id, a.title, a.cached_level, a.parent_id, a.lft, a.rgt,
+    a.childs_count, a.products_sum
+  ),
+  rubrics_123456 as
+  (
+    select node.id, node.title, node.cached_level, node.parent_id, node.lft, node.rgt,
+    node.childs_count, node.products_sum, sum(parent.traits_count) as trait_sum
+    from traits_count as node,
+    traits_count as parent
+    where node.lft between parent.lft and parent.rgt
+    group by node.id, node.title, node.cached_level,
+    node.parent_id, node.lft, node.rgt, node.childs_count, node.products_sum
+  )
+
+  select * from rubrics_123456
